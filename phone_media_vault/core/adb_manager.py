@@ -26,6 +26,14 @@ _SD_VOLUME_RE = re.compile(
     r"^(/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(?:/.*)?$",
     re.DOTALL,
 )
+_PROTECTED_STORAGE_RELATIVE_PATHS = (
+    ("Android", "data"),
+    ("Android", "obb"),
+    ("WhatsApp", "Databases"),
+    ("WhatsApp", "Backups"),
+    ("Android", "media", "com.whatsapp", "WhatsApp", "Databases"),
+    ("Android", "media", "com.whatsapp", "WhatsApp", "Backups"),
+)
 
 
 class AdbError(RuntimeError):
@@ -632,8 +640,8 @@ class AdbManager:
         The remote shell script emits NUL-delimited records, so spaces, Arabic,
         tabs, and newline characters in filenames do not corrupt the listing.
         Permission/stat failures are reported as issues rather than aborting the
-        whole folder scan. Optional excluded directories are pruned on-device
-        (they are not enumerated or stat'ed).
+        whole folder scan. Android/data, Android/obb, and WhatsApp Databases/
+        Backups are always pruned on-device; optional exclusions are pruned too.
         """
 
         root = self.validate_phone_path(root_path)
@@ -659,10 +667,8 @@ done
         auto_exclusions: list[str] = []
         volume_root = self._shared_storage_root(root)
         if volume_root is not None:
-            for directory_name in ("data", "obb"):
-                excluded_root = posixpath.join(
-                    volume_root, "Android", directory_name
-                )
+            for relative_parts in _PROTECTED_STORAGE_RELATIVE_PATHS:
+                excluded_root = posixpath.join(volume_root, *relative_parts)
                 if root == excluded_root or root.startswith(excluded_root + "/"):
                     # A caller cannot bypass the privacy exclusions by invoking
                     # the lower-level ADB listing API directly.

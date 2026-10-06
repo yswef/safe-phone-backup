@@ -57,6 +57,7 @@ class PrivateKeyStoreTests(unittest.TestCase):
 
             created = store.load_or_create()
             stored_bytes = key_path.read_bytes()
+            self.assertEqual(store.protection_mode, "dpapi")
             loaded = store.load_or_create()
 
             self.assertEqual(
@@ -74,6 +75,7 @@ class PrivateKeyStoreTests(unittest.TestCase):
             store = PrivateKeyStore(key_path, protector=UnavailableProtector())
             key = store.load_or_create("vault passphrase")
 
+            self.assertEqual(store.protection_mode, "password")
             self.assertNotIn(b"BEGIN PRIVATE KEY", key_path.read_bytes())
             reopened = store.load_or_create("vault passphrase")
             self.assertEqual(
