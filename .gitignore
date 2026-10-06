@@ -1,0 +1,14 @@
+# Python environments, bytecode, and test caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated application/build artifacts (sources remain tracked)
+phone_media_vault/build/
+phone_media_vault/dist/
+phone_media_vault/out/
+phone_media_vault/*.spec
+phone_media_vault/installer/*.exe

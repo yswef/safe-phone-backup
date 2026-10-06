@@ -1,0 +1,5 @@
+# Python 3.10+ runtime dependencies introduced so far
+cryptography>=42.0.0
+
+# pywebview, pyzipper, reportlab, and packaging tools will be added in their
+# implementation stages as the GUI/report/installer code is introduced.
