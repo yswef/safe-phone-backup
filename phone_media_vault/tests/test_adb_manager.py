@@ -107,7 +107,7 @@ class AdbReadOperationTests(unittest.TestCase):
         )
         self.assertEqual(manager.remote_stat("SERIAL", "/sdcard/file.jpg"), (1234, 1710000000))
 
-    def test_recursive_listing_enforces_android_data_and_obb_exclusions(self) -> None:
+    def test_recursive_listing_enforces_storage_and_whatsapp_exclusions(self) -> None:
         manager = object.__new__(AdbManager)
         commands: list[str] = []
 
@@ -119,22 +119,35 @@ class AdbReadOperationTests(unittest.TestCase):
         manager.list_file_stats("SERIAL", "/storage/ABCD-1234")
         self.assertIn("/storage/ABCD-1234/Android/data", commands[0])
         self.assertIn("/storage/ABCD-1234/Android/obb", commands[0])
+        self.assertIn("/storage/ABCD-1234/WhatsApp/Databases", commands[0])
+        self.assertIn("/storage/ABCD-1234/WhatsApp/Backups", commands[0])
+        self.assertIn(
+            "/storage/ABCD-1234/Android/media/com.whatsapp/WhatsApp/Databases",
+            commands[0],
+        )
         self.assertIn("-prune", commands[0])
 
-        # Direct calls on an excluded subtree return silently without probing
-        # the phone, while Android/media remains an eligible source.
+        # Direct calls on excluded subtrees return silently without probing
+        # the phone, while Android/media remains eligible for media.
         excluded = manager.list_file_stats(
             "SERIAL", "/storage/ABCD-1234/Android/data/app"
         )
         self.assertEqual(excluded.files, [])
         self.assertEqual(excluded.warnings, [])
+        whatsapp_excluded = manager.list_file_stats(
+            "SERIAL", "/storage/ABCD-1234/WhatsApp/Databases"
+        )
+        self.assertEqual(whatsapp_excluded.files, [])
+        self.assertEqual(whatsapp_excluded.warnings, [])
         self.assertEqual(len(commands), 1)
 
         manager.list_file_stats(
             "SERIAL", "/storage/ABCD-1234/Android/media"
         )
         self.assertEqual(len(commands), 2)
-        self.assertNotIn("-prune", commands[1])
+        self.assertIn("-prune", commands[1])
+        self.assertIn("/storage/ABCD-1234/Android/media/com.whatsapp/WhatsApp/Backups", commands[1])
+        self.assertNotIn("/storage/ABCD-1234/Android/data", commands[1])
 
     def test_pull_uses_timestamp_preservation_and_argument_list(self) -> None:
         manager = object.__new__(AdbManager)

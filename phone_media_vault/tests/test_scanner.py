@@ -109,12 +109,29 @@ class SourceDiscoveryTests(unittest.TestCase):
         self.assertEqual(source.volume_root, "/sdcard")
         self.assertIs(custom_source("/storage/1234-abcd/Pictures").kind, SourceKind.CUSTOM)
         self.assertEqual(custom_source("/sdcard/Android").root_path, "/sdcard/Android")
+        self.assertEqual(
+            custom_source("/sdcard/WhatsApp/Media").root_path,
+            "/sdcard/WhatsApp/Media",
+        )
+        self.assertEqual(
+            custom_source(
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Media"
+            ).root_path,
+            "/sdcard/Android/media/com.whatsapp/WhatsApp/Media",
+        )
         for unsafe_path in (
             "/sdcard/../private",
             "/data/data/com.example.app",
             "/sdcard",
             "/sdcard/Android/data/com.example.app",
             "/sdcard/Android/obb/com.example.app",
+            "/sdcard/WhatsApp",
+            "/sdcard/WhatsApp/Databases",
+            "/sdcard/WhatsApp/Backups",
+            "/sdcard/Android/media/com.whatsapp",
+            "/sdcard/Android/media/com.whatsapp/WhatsApp",
+            "/sdcard/Android/media/com.whatsapp/WhatsApp/Databases",
+            "/sdcard/Android/media/com.whatsapp/WhatsApp/Backups",
         ):
             with self.subTest(path=unsafe_path), self.assertRaises(ValueError):
                 custom_source(unsafe_path)
@@ -165,16 +182,79 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(by_phone_path["/storage/1234-abcd/Movies/b.MP4"].relative_path, "Movies/b.MP4")
         self.assertEqual(
             adb.excluded_paths_by_root["/sdcard"],
-            ("/sdcard/Android/data", "/sdcard/Android/obb"),
+            (
+                "/sdcard/Android/data",
+                "/sdcard/Android/obb",
+                "/sdcard/WhatsApp/Databases",
+                "/sdcard/WhatsApp/Backups",
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Databases",
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Backups",
+            ),
         )
         self.assertEqual(
             adb.excluded_paths_by_root["/storage/1234-abcd"],
             (
                 "/storage/1234-abcd/Android/data",
                 "/storage/1234-abcd/Android/obb",
+                "/storage/1234-abcd/WhatsApp/Databases",
+                "/storage/1234-abcd/WhatsApp/Backups",
+                "/storage/1234-abcd/Android/media/com.whatsapp/WhatsApp/Databases",
+                "/storage/1234-abcd/Android/media/com.whatsapp/WhatsApp/Backups",
             ),
         )
         self.assertEqual(result.warnings, [])
+
+    def test_whatsapp_databases_and_backups_are_pruned_and_media_remains(self) -> None:
+        adb = FakeAdb()
+        adb.listings["/sdcard"] = RemoteListing(
+            files=[
+                RemoteFileStat(
+                    "/sdcard/WhatsApp/Media/Images/legacy.jpg", 10, 1
+                ),
+                RemoteFileStat(
+                    "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/Images/new.jpg",
+                    20,
+                    2,
+                ),
+                RemoteFileStat(
+                    "/sdcard/WhatsApp/Databases/msgstore.db", 30, 3
+                ),
+                RemoteFileStat(
+                    "/sdcard/WhatsApp/Backups/backup.zip", 40, 4
+                ),
+                RemoteFileStat(
+                    "/sdcard/Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db",
+                    50,
+                    5,
+                ),
+                RemoteFileStat(
+                    "/sdcard/Android/media/com.whatsapp/WhatsApp/Backups/backup.zip",
+                    60,
+                    6,
+                ),
+            ],
+            symlinks=["/sdcard/WhatsApp/Databases/shortcut.db"],
+        )
+        source = StorageSource(
+            source_id="internal",
+            root_path="/sdcard",
+            label_en="Internal",
+            label_ar="الداخلية",
+            kind=SourceKind.INTERNAL_STORAGE,
+            volume_root="/sdcard",
+        )
+
+        result = scan_sources(adb, "PHONE-1", [source])
+
+        self.assertEqual(
+            [item.phone_path for item in result.files],
+            [
+                "/sdcard/WhatsApp/Media/Images/legacy.jpg",
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/Images/new.jpg",
+            ],
+        )
+        self.assertEqual(result.warnings, [])
+        self.assertEqual(result.skipped_symlink_count, 0)
 
     def test_unavailable_folder_is_reported_and_other_sources_continue(self) -> None:
         source_missing = StorageSource(
@@ -220,7 +300,12 @@ class ScanTests(unittest.TestCase):
                          "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/photo.jpg")
         self.assertEqual(
             adb.excluded_paths_by_root["/sdcard/Android"],
-            ("/sdcard/Android/data", "/sdcard/Android/obb"),
+            (
+                "/sdcard/Android/data",
+                "/sdcard/Android/obb",
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Databases",
+                "/sdcard/Android/media/com.whatsapp/WhatsApp/Backups",
+            ),
         )
 
     def test_android_app_data_root_is_skipped_silently(self) -> None:

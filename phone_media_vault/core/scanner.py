@@ -123,6 +123,12 @@ _SD_VOLUME_RE = re.compile(
     r"^(/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(?:/.*)?$",
     re.DOTALL,
 )
+_WHATSAPP_EXCLUDED_RELATIVE_PATHS = (
+    ("WhatsApp", "Databases"),
+    ("WhatsApp", "Backups"),
+    ("Android", "media", "com.whatsapp", "WhatsApp", "Databases"),
+    ("Android", "media", "com.whatsapp", "WhatsApp", "Backups"),
+)
 _EMULATED_VOLUME_RE = re.compile(
     r"^(/storage/emulated/[0-9]+)(?:/.*)?$",
     re.DOTALL,
@@ -211,13 +217,49 @@ def _is_android_excluded_path(path: str, volume_root: str) -> bool:
     )
 
 
+def _is_whatsapp_database_or_backup(path: str, volume_root: str) -> bool:
+    """Exclude WhatsApp's non-media Databases and Backups trees."""
+
+    if not _is_within(volume_root, path):
+        return False
+    relative = posixpath.relpath(path, volume_root)
+    parts = tuple(part.casefold() for part in relative.split("/"))
+    return any(
+        parts[: len(prefix)] == tuple(component.casefold() for component in prefix)
+        for prefix in _WHATSAPP_EXCLUDED_RELATIVE_PATHS
+    )
+
+
+def _validate_whatsapp_custom_root(path: str, volume_root: str) -> None:
+    """Require custom roots inside WhatsApp storage to target Media only."""
+
+    restricted_roots = (
+        posixpath.join(volume_root, "WhatsApp"),
+        posixpath.join(volume_root, "Android", "media", "com.whatsapp"),
+    )
+    allowed_media_roots = (
+        posixpath.join(volume_root, "WhatsApp", "Media"),
+        posixpath.join(
+            volume_root, "Android", "media", "com.whatsapp", "WhatsApp", "Media"
+        ),
+    )
+    if any(_is_within(root, path) for root in restricted_roots) and not any(
+        _is_within(media_root, path) for media_root in allowed_media_roots
+    ):
+        raise ValueError(
+            "مجلد واتساب المخصص يجب أن يكون داخل Media؛ "
+            "مجلدا Databases وBackups مستبعدان."
+        )
+
+
 def custom_source(phone_path: str) -> StorageSource:
     """Create a custom-folder source limited to shared user storage.
 
     Private Android paths such as ``/data`` are never accepted. A custom root
     inside ``Android/data`` or ``Android/obb`` is refused; if a broader root is
     selected, those subtrees are pruned silently while ``Android/media`` remains
-    eligible for scanning.
+    eligible. Custom WhatsApp roots must point into a ``Media`` subtree, and
+    Databases/Backups are pruned from broader shared-storage scans.
     """
 
     path = _normalize_phone_path(phone_path)
@@ -234,6 +276,9 @@ def custom_source(phone_path: str) -> StorageSource:
         raise ValueError(
             "تم استبعاد Android/data وAndroid/obb من النسخ الاحتياطي."
         )
+    if _is_whatsapp_database_or_backup(path, volume_root):
+        raise ValueError("مجلدا WhatsApp Databases وBackups مستبعدان.")
+    _validate_whatsapp_custom_root(path, volume_root)
     return StorageSource(
         source_id=f"custom:{path}",
         root_path=path,
@@ -396,7 +441,9 @@ def scan_sources(
 
         # If a user somehow selects a path inside these excluded trees, skip it
         # without probing it or producing misleading permission-error entries.
-        if _is_android_excluded_path(root, volume_root):
+        if _is_android_excluded_path(root, volume_root) or (
+            _is_whatsapp_database_or_backup(root, volume_root)
+        ):
             continue
 
         if source.kind is SourceKind.CUSTOM:
@@ -431,6 +478,10 @@ def scan_sources(
                 for excluded_path in (
                     posixpath.join(volume_root, "Android", "data"),
                     posixpath.join(volume_root, "Android", "obb"),
+                    *(
+                        posixpath.join(volume_root, *relative_parts)
+                        for relative_parts in _WHATSAPP_EXCLUDED_RELATIVE_PATHS
+                    ),
                 )
                 if excluded_path != root and _is_within(root, excluded_path)
             )
@@ -486,6 +537,10 @@ def scan_sources(
                     )
                 )
                 continue
+            if _is_android_excluded_path(symlink_path, volume_root) or (
+                _is_whatsapp_database_or_backup(symlink_path, volume_root)
+            ):
+                continue
             result.skipped_symlink_paths.append(symlink_path)
             result.warnings.append(
                 ScanWarning(
@@ -516,6 +571,10 @@ def scan_sources(
                         phone_path=phone_path,
                     )
                 )
+                continue
+            if _is_android_excluded_path(phone_path, volume_root) or (
+                _is_whatsapp_database_or_backup(phone_path, volume_root)
+            ):
                 continue
             if remote_file.size < 0:
                 result.warnings.append(

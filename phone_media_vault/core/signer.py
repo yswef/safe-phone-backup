@@ -250,6 +250,25 @@ class PrivateKeyStore:
     def key_path(self) -> Path:
         return self._key_path
 
+    @property
+    def protection_mode(self) -> str | None:
+        """Return the stored key's protection mode without decrypting it."""
+
+        if not self._key_path.exists():
+            return None
+        try:
+            payload = self._key_path.read_bytes()
+        except OSError as exc:
+            raise KeyStoreCorruptError(str(exc)) from exc
+        if not payload.startswith(_KEY_MAGIC):
+            return "unknown"
+        body = payload[len(_KEY_MAGIC) :]
+        if body.startswith(_PASSWORD_MARKER):
+            return "password"
+        if body.startswith(_DPAPI_MARKER):
+            return "dpapi"
+        return "unknown"
+
     def load_or_create(self, password: str | None = None) -> Ed25519PrivateKey:
         if self._key_path.exists():
             return self._load_existing(password)
