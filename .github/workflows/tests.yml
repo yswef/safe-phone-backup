@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: python -m pip install cryptography pyzipper
+      - name: Run tests
+        run: python -m unittest discover -s phone_media_vault/tests -v
+      - name: CLI demo smoke test
+        shell: bash
+        env:
+          PMV_KEY_PASSWORD: ci-demo-password
+        run: |
+          python -m phone_media_vault.cli --demo --demo-root "$RUNNER_TEMP/phone" --key-dir "$RUNNER_TEMP/keys" backup --source internal:entire --destination "$RUNNER_TEMP/backup"
+          python -m phone_media_vault.cli --demo --demo-root "$RUNNER_TEMP/phone" --key-dir "$RUNNER_TEMP/keys" verify "$RUNNER_TEMP/backup"

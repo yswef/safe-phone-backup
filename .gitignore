@@ -12,3 +12,8 @@ phone_media_vault/dist/
 phone_media_vault/out/
 phone_media_vault/*.spec
 phone_media_vault/installer/*.exe
+phone_media_vault/installer/Output/
+
+# Android Platform-Tools binaries are bundled at build time, not committed
+phone_media_vault/platform-tools/*
+!phone_media_vault/platform-tools/.gitkeep
