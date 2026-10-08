@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>خزنة الوسائط — Phone Media Vault</title>
+  <link rel="stylesheet" href="css/app.css">
+  <!--PMV_BOOTSTRAP-->
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" class="brand-icon" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z"/></svg>
+      <div>
+        <div class="brand-title">خزنة الوسائط</div>
+        <div class="brand-sub">Phone Media Vault <span id="app-version"></span></div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-item active" data-page="device">📱 الجهاز</button>
+      <button class="nav-item" data-page="backup">💾 النسخ الاحتياطي</button>
+      <button class="nav-item" data-page="verify">🛡️ التحقق من النسخة</button>
+      <button class="nav-item" data-page="restore">♻️ الاستعادة إلى الهاتف</button>
+      <button class="nav-item" data-page="wipe">🧹 تحرير مساحة الهاتف</button>
+      <button class="nav-item" data-page="export">🔐 تصدير مشفّر</button>
+      <button class="nav-item" data-page="history">🕘 السجل</button>
+      <button class="nav-item" data-page="settings">⚙️ الإعدادات</button>
+    </nav>
+    <div class="device-chip" id="device-chip">لا يوجد هاتف محدد</div>
+    <div class="demo-badge hidden" id="demo-badge">وضع تجريبي — هاتف محاكى</div>
+  </aside>
+
+  <main class="content">
+    <div id="alert" class="alert hidden"></div>
+
+    <!-- Signing key setup -->
+    <section class="card hidden" id="key-card">
+      <h2>🔑 مفتاح التوقيع</h2>
+      <p id="key-message"></p>
+      <div class="row">
+        <input type="password" id="key-password" placeholder="كلمة مرور المفتاح" autocomplete="new-password">
+        <button class="btn primary" id="key-submit">متابعة</button>
+      </div>
+      <p class="muted small">المفتاح الخاص يُحفظ في بيانات المستخدم على هذا الكمبيوتر فقط ولا يوضع داخل النسخة الاحتياطية.</p>
+    </section>
+
+    <!-- Device page -->
+    <section class="page active" id="page-device">
+      <header class="page-header">
+        <h1>الجهاز</h1>
+        <button class="btn" id="refresh-devices">🔄 تحديث</button>
+      </header>
+      <div class="card">
+        <h3>الهواتف المتصلة عبر USB</h3>
+        <div id="device-list" class="list"><p class="muted">جارٍ البحث…</p></div>
+      </div>
+      <div class="card tips">
+        <h3>قبل البدء</h3>
+        <ol>
+          <li>فعّل <b>خيارات المطوّر</b> ثم <b>تصحيح USB</b> في الهاتف.</li>
+          <li>صل الهاتف بالكمبيوتر بكابل USB واختر وضع <b>نقل الملفات</b>.</li>
+          <li>وافق على نافذة <b>السماح بتصحيح USB</b> (بصمة RSA) على شاشة الهاتف.</li>
+        </ol>
+        <p class="muted small" id="adb-info"></p>
+      </div>
+    </section>
+
+    <!-- Backup page -->
+    <section class="page" id="page-backup">
+      <header class="page-header"><h1>النسخ الاحتياطي</h1></header>
+      <div class="card">
+        <div class="card-title-row">
+          <h3>1. اختر المجلدات</h3>
+          <button class="btn small" id="reload-sources">🔄 إعادة اكتشاف</button>
+        </div>
+        <div id="source-list" class="source-grid"><p class="muted">اختر هاتفاً أولاً.</p></div>
+        <div class="row">
+          <input type="text" id="custom-folder" dir="ltr" placeholder="/sdcard/MyFolder">
+          <button class="btn" id="add-custom">➕ إضافة مجلد مخصص</button>
+        </div>
+        <p class="muted small">يتم دائماً استبعاد Android/data و Android/obb وقواعد بيانات واتساب (Databases/Backups). الروابط الرمزية لا تُتبع.</p>
+        <button class="btn primary" id="start-scan">🔍 فحص الملفات</button>
+      </div>
+      <div class="card hidden" id="scan-card">
+        <h3>2. نتيجة الفحص</h3>
+        <div class="stats" id="scan-stats"></div>
+        <details id="scan-warnings-box" class="hidden"><summary id="scan-warnings-title"></summary><ul id="scan-warnings"></ul></details>
+      </div>
+      <div class="card hidden" id="backup-card">
+        <h3>3. الوجهة على الكمبيوتر</h3>
+        <div class="row">
+          <input type="text" id="backup-destination" dir="ltr" placeholder="D:\PhoneMediaVault\MyPhone">
+          <button class="btn folder-btn" data-target="backup-destination">📁 اختيار</button>
+        </div>
+        <p class="muted small">استخدم نفس المجلد في كل مرة لنفس الهاتف: النسخ <b>تزايدي</b> — الملفات الموثقة سابقاً لا تُنسخ مجدداً، ولا يُستبدل أي ملف موجود.</p>
+        <label class="check"><input type="checkbox" id="opt-verify" checked> التحقق الكامل من النسخة بعد الانتهاء</label>
+        <label class="check"><input type="checkbox" id="opt-hash-serial"> إخفاء الرقم التسلسلي للهاتف في manifest (تجزئة SHA-256)</label>
+        <button class="btn primary big" id="start-backup">💾 بدء النسخ الاحتياطي</button>
+      </div>
+      <div class="card hidden result-card" id="backup-result"></div>
+    </section>
+
+    <!-- Verify page -->
+    <section class="page" id="page-verify">
+      <header class="page-header"><h1>التحقق من سلامة النسخة</h1></header>
+      <div class="card">
+        <p>يفحص توقيع Ed25519 للـ manifest ويعيد حساب بصمة SHA-256 لكل ملف، ويكشف الملفات المفقودة أو المعدّلة أو الإضافية. لا يحتاج إلى الهاتف ولا يعدّل أي شيء.</p>
+        <div class="row">
+          <input type="text" id="verify-path" dir="ltr" placeholder="مجلد النسخة الاحتياطية">
+          <button class="btn folder-btn" data-target="verify-path">📁 اختيار</button>
+          <button class="btn primary" id="start-verify">🛡️ تحقق الآن</button>
+        </div>
+      </div>
+      <div class="card hidden result-card" id="verify-result"></div>
+    </section>
+
+    <!-- Restore page -->
+    <section class="page" id="page-restore">
+      <header class="page-header"><h1>الاستعادة إلى الهاتف</h1></header>
+      <div class="card">
+        <div class="row">
+          <input type="text" id="restore-path" dir="ltr" placeholder="مجلد النسخة الاحتياطية">
+          <button class="btn folder-btn" data-target="restore-path">📁 اختيار</button>
+        </div>
+        <div class="radio-group">
+          <label class="check"><input type="radio" name="restore-mode" value="folder" checked> إلى مجلد منفصل على الهاتف (الأكثر أماناً)</label>
+          <input type="text" id="restore-target" dir="ltr" value="/sdcard/Restored">
+          <label class="check"><input type="radio" name="restore-mode" value="original"> إلى المسارات الأصلية</label>
+        </div>
+        <div class="radio-group">
+          <span class="muted">إذا وُجد ملف مختلف بنفس الاسم:</span>
+          <label class="check"><input type="radio" name="restore-conflict" value="skip" checked> تخطَّه</label>
+          <label class="check"><input type="radio" name="restore-conflict" value="rename"> استعد باسم جديد</label>
+        </div>
+        <p class="muted small">لا يُستبدل أي ملف على الهاتف. يُتحقق من كل ملف قبل النقل وبعده بالبصمة.</p>
+        <button class="btn primary" id="start-restore">♻️ بدء الاستعادة</button>
+      </div>
+      <div class="card hidden result-card" id="restore-result"></div>
+    </section>
+
+    <!-- Wipe page -->
+    <section class="page" id="page-wipe">
+      <header class="page-header"><h1>تحرير مساحة الهاتف بأمان</h1></header>
+      <div class="card warning-card">
+        <p><b>تحذير:</b> هذه العملية تحذف ملفات من الهاتف. لن يُحذف إلا الملف الذي ثبت أنه موجود في النسخة وسليم: توقيع صالح، النسخة المحلية مطابقة للبصمة، والملف على الهاتف لم يتغير وبصمته مطابقة. الهواتف التي لا تدعم sha256sum لن يُحذف منها شيء.</p>
+        <div class="row">
+          <input type="text" id="wipe-path" dir="ltr" placeholder="مجلد النسخة الاحتياطية">
+          <button class="btn folder-btn" data-target="wipe-path">📁 اختيار</button>
+          <button class="btn" id="start-wipe-plan">🔎 فحص الملفات القابلة للحذف</button>
+        </div>
+      </div>
+      <div class="card hidden" id="wipe-plan-card">
+        <div class="stats" id="wipe-stats"></div>
+        <details id="wipe-rejected-box"><summary id="wipe-rejected-title"></summary><ul id="wipe-rejected"></ul></details>
+        <div id="wipe-confirm-area">
+          <p>للتأكيد اكتب العبارة: <code id="wipe-phrase"></code></p>
+          <div class="row">
+            <input type="text" id="wipe-confirm" placeholder="عبارة التأكيد">
+            <button class="btn danger" id="execute-wipe">🗑️ حذف الملفات المؤكدة</button>
+          </div>
+        </div>
+      </div>
+      <div class="card hidden result-card" id="wipe-result"></div>
+    </section>
+
+    <!-- Export page -->
+    <section class="page" id="page-export">
+      <header class="page-header"><h1>تصدير نسخة مشفّرة (ZIP AES-256)</h1></header>
+      <div class="card">
+        <p>ينشئ أرشيف ZIP مشفّراً بـ AES-256 (يُفتح بـ 7-Zip أو WinRAR) يحتوي على الملفات الموثقة و manifest والتوقيع، ثم يتحقق من كل ملف داخل الأرشيف.</p>
+        <div class="row">
+          <input type="text" id="export-source" dir="ltr" placeholder="مجلد النسخة الاحتياطية">
+          <button class="btn folder-btn" data-target="export-source">📁 اختيار</button>
+        </div>
+        <div class="row">
+          <input type="text" id="export-target" dir="ltr" placeholder="مسار ملف الأرشيف .zip">
+        </div>
+        <div class="row">
+          <input type="password" id="export-password" placeholder="كلمة المرور (8 أحرف على الأقل)" autocomplete="new-password">
+          <input type="password" id="export-password2" placeholder="تأكيد كلمة المرور" autocomplete="new-password">
+        </div>
+        <button class="btn primary" id="start-export">🔐 تصدير</button>
+      </div>
+      <div class="card hidden result-card" id="export-result"></div>
+    </section>
+
+    <!-- History page -->
+    <section class="page" id="page-history">
+      <header class="page-header"><h1>السجل</h1><button class="btn" id="refresh-history">🔄 تحديث</button></header>
+      <div class="card"><div id="history-list" class="list"></div></div>
+    </section>
+
+    <!-- Settings page -->
+    <section class="page" id="page-settings">
+      <header class="page-header"><h1>الإعدادات</h1></header>
+      <div class="card form">
+        <label>مجلد النسخ الافتراضي
+          <div class="row">
+            <input type="text" id="set-destination" dir="ltr" placeholder="D:\PhoneMediaVault">
+            <button class="btn folder-btn" data-target="set-destination">📁</button>
+          </div>
+        </label>
+        <label>عدد مرات إعادة المحاولة لكل ملف
+          <input type="number" id="set-retries" min="0" max="10">
+        </label>
+        <label>مجلد الاستعادة الافتراضي على الهاتف
+          <input type="text" id="set-restore-folder" dir="ltr">
+        </label>
+        <label class="check"><input type="checkbox" id="set-verify"> التحقق تلقائياً بعد كل نسخة</label>
+        <label class="check"><input type="checkbox" id="set-hash-serial"> إخفاء الرقم التسلسلي افتراضياً</label>
+        <label class="check"><input type="checkbox" id="set-media-scan"> تحديث معرض الهاتف بعد الاستعادة/الحذف</label>
+        <button class="btn primary" id="save-settings">💾 حفظ</button>
+        <hr>
+        <p class="muted small" id="key-info"></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Progress overlay -->
+<div class="overlay hidden" id="job-overlay">
+  <div class="job-box">
+    <h2 id="job-title">جارٍ التنفيذ…</h2>
+    <div class="progress"><div class="progress-bar" id="job-bar"></div></div>
+    <div class="job-line" id="job-line"></div>
+    <div class="job-current" id="job-current" dir="ltr"></div>
+    <div class="row center">
+      <button class="btn" id="job-pause">⏸ إيقاف مؤقت</button>
+      <button class="btn danger" id="job-cancel">✖ إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
